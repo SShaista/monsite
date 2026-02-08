@@ -40,6 +40,10 @@ document.addEventListener("DOMContentLoaded", () => {
       weekday: "long",
       day: "numeric",
       month: "long",
+       setupNavigation();
+  if (typeof renderCoursesPage === "function") {
+    renderCoursesPage();
+  }
     });
   }
 

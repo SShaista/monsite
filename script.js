@@ -401,3 +401,35 @@ function setStatus(msg, isError = false) {
   icsStatus.textContent = msg;
   icsStatus.style.color = isError ? "#dc3545" : "";
 }
+
+function setupNavigation() {
+  const navItems = document.querySelectorAll(".nav-item");
+  const views = document.querySelectorAll(".view");
+  const pageTitle = document.getElementById("page-title");
+
+  navItems.forEach((item) => {
+    item.addEventListener("click", () => {
+      const viewName = item.dataset.view;
+
+      navItems.forEach((n) => n.classList.remove("active"));
+      item.classList.add("active");
+
+      views.forEach((v) => v.classList.remove("active"));
+      document.getElementById(`view-${viewName}`)?.classList.add("active");
+
+      const titles = {
+        schedule: "Emploi du temps",
+        courses: "Mes cours",
+        exams: "Examens",
+        settings: "Paramètres",
+      };
+      if (pageTitle) pageTitle.textContent = titles[viewName] || "Student Portal";
+
+      // IMPORTANT: quand on va sur Cours, on render
+      if (viewName === "courses" && typeof renderCoursesPage === "function") {
+        renderCoursesPage();
+      }
+    });
+  });
+}
+

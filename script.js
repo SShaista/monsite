@@ -1,6 +1,9 @@
 // =====================
 // iCal -> Affichage par SEMAINE (existante) + jour
 // Robuste grâce à ical.js
+// - Auto load ./edt.ics (GitHub/Netlify)
+// - PAS d'import utilisateur
+// - Résumé (événements/heures/jours) corrigé
 // =====================
 
 let allEvents = [];          // {title, room, start:Date, end:Date, weekKey, color}
@@ -10,14 +13,11 @@ let selectedDay = null;      // Date (local) à 00:00
 
 const PALETTE = ["#007bff", "#17a2b8", "#28a745", "#ffc107", "#dc3545", "#6f42c1", "#fd7e14", "#e83e8c", "#20c997", "#6610f2", "#0dcaf0", "#adb5bd"];
 
-// DOM (adapte si tes ids diffèrent)
+// DOM
 const loadingScreen = document.getElementById("loading-screen");
 const app = document.getElementById("app");
 const currentDateEl = document.getElementById("current-date");
 
-const icsFileInput = document.getElementById("icsFile");
-const btnImport = document.getElementById("btnImport");
-const btnReload = document.getElementById("btnReload");
 const icsStatus = document.getElementById("icsStatus");
 
 const prevWeekBtn = document.getElementById("prevWeek");
@@ -25,6 +25,11 @@ const nextWeekBtn = document.getElementById("nextWeek");
 const weekLabelEl = document.getElementById("weekLabel");
 const weekDatesEl = document.getElementById("weekDates");
 const daySelectorEl = document.getElementById("daySelector");
+
+// Résumé
+const sumCoursesEl = document.getElementById("sumCourses");
+const sumHoursEl = document.getElementById("sumHours");
+const sumDaysEl = document.getElementById("sumDays");
 
 document.addEventListener("DOMContentLoaded", () => {
   // Date du jour (juste affichage)
@@ -43,16 +48,6 @@ document.addEventListener("DOMContentLoaded", () => {
     app?.classList.remove("hidden");
   }, 400);
 
-  // Import/reload
-  btnImport?.addEventListener("click", async () => {
-    const file = icsFileInput?.files?.[0];
-    if (!file) return setStatus("Choisis un fichier .ics d'abord.", true);
-    const text = await file.text();
-    loadFromIcsText(text, `Import OK (${file.name}) ✅`);
-  });
-
-  btnReload?.addEventListener("click", () => loadIcsFromServer());
-
   // Prev/Next week
   prevWeekBtn?.addEventListener("click", () => changeWeek(-1));
   nextWeekBtn?.addEventListener("click", () => changeWeek(+1));
@@ -65,18 +60,21 @@ async function loadIcsFromServer() {
   try {
     setStatus("Chargement de edt.ics…");
     const res = await fetch("./edt.ics", { cache: "no-store" });
+
     if (!res.ok) {
-      setStatus("edt.ics introuvable. Mets edt.ics à côté de index.html OU utilise Importer.", true);
+      setStatus("edt.ics introuvable. Vérifie qu'il est bien dans le repo (même dossier que index.html).", true);
       allEvents = [];
       availableWeeks = [];
       selectedDay = null;
       renderAll();
       return;
     }
+
     const text = await res.text();
     loadFromIcsText(text, "edt.ics chargé ✅");
   } catch (e) {
-    setStatus("Erreur de lecture edt.ics. Utilise Importer.", true);
+    console.error(e);
+    setStatus("Erreur de lecture edt.ics.", true);
     allEvents = [];
     availableWeeks = [];
     selectedDay = null;
@@ -86,7 +84,6 @@ async function loadIcsFromServer() {
 
 function loadFromIcsText(icsText, okMsg) {
   try {
-    // Parse robuste (au lieu de split(':') fragile) — recommandé sur ta page :contentReference[oaicite:1]{index=1}
     allEvents = parseWithIcalJs(icsText);
 
     setStatus(`${okMsg} — ${allEvents.length} événement(s)`);
@@ -119,12 +116,8 @@ function parseWithIcalJs(icsText) {
     const title = ev.summary || "Événement";
     const room = (ev.location || "").trim();
 
-    // Gestion des récurrences :
-    // - si le .ics est déjà “plat” : aucune récurrence => 1 occurrence
-    // - si récurrent : on génère des occurrences entre min/max des événements (safe)
+    // Récurrences (bornées)
     if (ev.isRecurring()) {
-      // On borne l’expansion : de (aujourd’hui - 30 jours) à (aujourd’hui + 180 jours)
-      // (Tu peux augmenter si besoin)
       const startRange = new Date();
       startRange.setDate(startRange.getDate() - 30);
       const endRange = new Date();
@@ -204,6 +197,7 @@ function renderAll() {
   renderDaySelector();
   renderSchedule();
   updateWeekButtons();
+  updateSummary(); // ✅ Résumé corrigé
 }
 
 function renderWeekBar() {
@@ -241,6 +235,7 @@ function renderDaySelector() {
       selectedDay = startOfLocalDay(d);
       renderDaySelector();
       renderSchedule();
+      updateSummary(); // ✅ met à jour aussi au changement de jour
     });
     daySelectorEl.appendChild(btn);
   }
@@ -303,6 +298,39 @@ function updateWeekButtons() {
   nextWeekBtn.disabled = selectedWeekIndex >= availableWeeks.length - 1;
   prevWeekBtn.style.opacity = prevWeekBtn.disabled ? "0.5" : "1";
   nextWeekBtn.style.opacity = nextWeekBtn.disabled ? "0.5" : "1";
+}
+
+// ========== ✅ Résumé (corrige le 0h/0 jours) ==========
+function updateSummary() {
+  if (!sumCoursesEl || !sumHoursEl || !sumDaysEl) return;
+
+  if (!availableWeeks.length) {
+    sumCoursesEl.textContent = "0";
+    sumHoursEl.textContent = "0h";
+    sumDaysEl.textContent = "0";
+    return;
+  }
+
+  const wk = availableWeeks[selectedWeekIndex];
+  const weekEvents = allEvents.filter(e => e.weekKey === wk);
+
+  // Nombre d'événements (semaine)
+  sumCoursesEl.textContent = String(weekEvents.length);
+
+  // Durée totale (semaine) : somme des (end-start)
+  let minutes = 0;
+  for (const e of weekEvents) {
+    const diff = (e.end - e.start) / 60000;
+    if (Number.isFinite(diff) && diff > 0) minutes += diff;
+  }
+  const hours = Math.round((minutes / 60) * 10) / 10;
+  sumHoursEl.textContent = `${hours}h`;
+
+  // Jours distincts (semaine)
+  const daySet = new Set(weekEvents.map(e =>
+    `${e.start.getFullYear()}-${e.start.getMonth()}-${e.start.getDate()}`
+  ));
+  sumDaysEl.textContent = String(daySet.size);
 }
 
 // ========== Helpers (dates robustes) ==========

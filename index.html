@@ -45,21 +45,8 @@
     <main class="main-content">
       <!-- Schedule View -->
       <section id="view-schedule" class="view active">
-        <div class="upload-card">
-          <div class="upload-row">
-            <div>
-              <h3>Emploi du temps (iCal)</h3>
-              <p class="muted">Importe ton fichier .ics, ou dépose-le dans le dossier du site sous le nom <b>edt.ics</b>.</p>
-            </div>
-          </div>
 
-          <div class="upload-actions">
-            <input id="icsFile" type="file" accept=".ics,text/calendar" />
-            <button id="btnImport" class="primary-btn">Importer</button>
-            <button id="btnReload" class="secondary-btn">Recharger edt.ics</button>
-          </div>
-          <p id="icsStatus" class="muted" style="margin-top:10px;"></p>
-        </div>
+        <div id="icsStatus" style="display:none;"></div>
 
       <!-- Week selector -->
         <div class="week-bar">

@@ -5,6 +5,7 @@
 // - PAS d'import utilisateur
 // - Résumé (événements/heures/jours) corrigé
 // =====================
+renderCoursesPage();
 
 let allEvents = [];          // {title, room, start:Date, end:Date, weekKey, color}
 let availableWeeks = [];     // ["2026-W05", ...] seulement celles qui existent

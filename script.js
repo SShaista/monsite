@@ -4,6 +4,7 @@
 // - Auto load ./edt.ics (GitHub/Netlify)
 // - PAS d'import utilisateur
 // - Résumé (événements/heures/jours) corrigé
+// + Onglet "Cours" (UE/ECUE) avec filtres semestre + compteurs
 // =====================
 
 let allEvents = [];          // {title, room, start:Date, end:Date, weekKey, color}
@@ -12,6 +13,9 @@ let selectedWeekIndex = 0;
 let selectedDay = null;      // Date (local) à 00:00
 
 const PALETTE = ["#007bff", "#17a2b8", "#28a745", "#ffc107", "#dc3545", "#6f42c1", "#fd7e14", "#e83e8c", "#20c997", "#6610f2", "#0dcaf0", "#adb5bd"];
+
+// ===== Courses State =====
+let selectedSemester = "all";
 
 // DOM
 const loadingScreen = document.getElementById("loading-screen");
@@ -26,13 +30,70 @@ const weekLabelEl = document.getElementById("weekLabel");
 const weekDatesEl = document.getElementById("weekDates");
 const daySelectorEl = document.getElementById("daySelector");
 
-// Résumé
+// Résumé (EDT)
 const sumCoursesEl = document.getElementById("sumCourses");
 const sumHoursEl = document.getElementById("sumHours");
 const sumDaysEl = document.getElementById("sumDays");
 
+// =====================
+// Données "Cours" (UE/ECUE)
+// =====================
+const ueData = [
+  {
+    id: "ue-s1-maths",
+    semester: 1,
+    title: "UE Mathématiques & Modélisation",
+    code: "UE1",
+    ecues: [
+      { id: "ecue1", name: "Analyse Numérique", code: "MAT-101", teacher: "Dr. Martin", credits: 3, description: "Méthodes numériques pour la résolution d'équations différentielles et l'optimisation.", color: "#007bff" },
+      { id: "ecue8", name: "Probabilités et Statistiques", code: "MAT-103", teacher: "Dr. Michel", credits: 3, description: "Théorie des probabilités et méthodes statistiques pour l'ingénieur.", color: "#e83e8c" },
+    ],
+  },
+  {
+    id: "ue-s1-meca",
+    semester: 1,
+    title: "UE Mécanique",
+    code: "UE2",
+    ecues: [
+      { id: "ecue4", name: "Résistance des Matériaux", code: "MEC-102", teacher: "Dr. Robert", credits: 4, description: "Analyse des contraintes et déformations dans les structures mécaniques.", color: "#ffc107" },
+    ],
+  },
+  {
+    id: "ue-s2-phys",
+    semester: 2,
+    title: "UE Physique & Thermodynamique",
+    code: "UE3",
+    ecues: [
+      { id: "ecue2", name: "Mécanique des Fluides", code: "PHY-201", teacher: "Dr. Bernard", credits: 4, description: "Étude des fluides en mouvement, équations de Navier-Stokes et applications.", color: "#17a2b8" },
+      { id: "ecue5", name: "Thermodynamique Appliquée", code: "PHY-202", teacher: "Dr. Richard", credits: 3, description: "Principes thermodynamiques et applications en ingénierie.", color: "#dc3545" },
+    ],
+  },
+  {
+    id: "ue-s2-elec",
+    semester: 2,
+    title: "UE Électronique",
+    code: "UE4",
+    ecues: [
+      { id: "ecue7", name: "Circuits Électroniques", code: "ELE-201", teacher: "Dr. Laurent", credits: 4, description: "Conception et analyse de circuits électroniques analogiques et numériques.", color: "#fd7e14" },
+    ],
+  },
+  {
+    id: "ue-s3-info",
+    semester: 3,
+    title: "UE Informatique & Dev",
+    code: "UE5",
+    ecues: [
+      { id: "ecue3", name: "Programmation Orientée Objet", code: "INFO-301", teacher: "Dr. Petit", credits: 5, description: "Concepts avancés de POO, design patterns, développement d'applications.", color: "#28a745" },
+      { id: "ecue6", name: "Développement Web Full Stack", code: "INFO-302", teacher: "Dr. Simon", credits: 6, description: "Apps web modernes (front/back) et bases de données.", color: "#6f42c1" },
+    ],
+  },
+];
+
+// =====================
+// Init
+// =====================
 document.addEventListener("DOMContentLoaded", () => {
-  // Date du jour (juste affichage)
+  // Date du jour (affichage)
   const now = new Date();
   if (currentDateEl) {
     currentDateEl.textContent = now.toLocaleDateString("fr-FR", {
@@ -41,6 +102,11 @@ document.addEventListener("DOMContentLoaded", () => {
       month: "long",
     });
   }
+
+  // Navigation + Cours
+  setupNavigation();
+  setupFilterSelector();
+  renderCourses();
 
   // Loading -> app
   setTimeout(() => {
@@ -56,6 +122,125 @@ document.addEventListener("DOMContentLoaded", () => {
   loadIcsFromServer();
 });
 
+// =====================
+// Navigation
+// =====================
+function setupNavigation() {
+  const navItems = document.querySelectorAll(".nav-item");
+  const views = document.querySelectorAll(".view");
+  const pageTitle = document.getElementById("page-title");
+
+  navItems.forEach((item) => {
+    item.addEventListener("click", () => {
+      const viewName = item.dataset.view;
+
+      navItems.forEach((n) => n.classList.remove("active"));
+      item.classList.add("active");
+
+      views.forEach((v) => v.classList.remove("active"));
+      const target = document.getElementById(`view-${viewName}`);
+      if (target) target.classList.add("active");
+
+      const titles = {
+        schedule: "Emploi du temps",
+        courses: "Mes cours",
+        exams: "Examens & Tâches",
+        settings: "Paramètres",
+      };
+      if (pageTitle) pageTitle.textContent = titles[viewName] || "Student Portal";
+    });
+  });
+}
+
+// =====================
+// Cours (UE/ECUE)
+// =====================
+function setupFilterSelector() {
+  const filterButtons = document.querySelectorAll(".filter-btn");
+  if (!filterButtons.length) return;
+
+  filterButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      filterButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedSemester = btn.dataset.semester || "all";
+      renderCourses();
+    });
+  });
+}
+
+function renderCourses() {
+  const container = document.getElementById("courses-list");
+  if (!container) return;
+
+  const sem = selectedSemester;
+
+  const filteredUEs =
+    sem === "all"
+      ? ueData
+      : ueData.filter((ue) => ue.semester === parseInt(sem, 10));
+
+  const totalUE = filteredUEs.length;
+  const totalECUE = filteredUEs.reduce((acc, ue) => acc + ue.ecues.length, 0);
+  const totalECTS = filteredUEs.reduce(
+    (acc, ue) => acc + ue.ecues.reduce((a, e) => a + (e.credits || 0), 0),
+    0
+  );
+
+  const cEl = document.getElementById("coursesCount");
+  const uEl = document.getElementById("uesCount");
+  const eEl = document.getElementById("ectsTotal");
+  if (cEl) cEl.textContent = String(totalECUE);
+  if (uEl) uEl.textContent = String(totalUE);
+  if (eEl) eEl.textContent = String(totalECTS);
+
+  if (!filteredUEs.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📚</div>
+        <p>Aucun cours pour ce semestre.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filteredUEs
+    .map((ue) => {
+      const ects = ue.ecues.reduce((a, e) => a + (e.credits || 0), 0);
+      return `
+        <div class="ue-card">
+          <div class="ue-header" style="display:flex;justify-content:space-between;gap:12px;">
+            <div>
+              <div class="ue-code" style="opacity:.7;font-size:12px;">${escapeHtml(ue.code || "")}</div>
+              <h3 class="ue-title" style="margin:4px 0 0;">${escapeHtml(ue.title)}</h3>
+            </div>
+            <div class="ue-ects" style="opacity:.7;font-size:12px;white-space:nowrap;">${ects} ECTS</div>
+          </div>
+
+          <div class="ue-content" style="margin-top:10px;">
+            ${ue.ecues
+              .map(
+                (ecue) => `
+              <div class="ecue-item" style="padding:10px 0;border-top:1px solid rgba(0,0,0,.08);">
+                <div class="ecue-name"><strong>${escapeHtml(ecue.name)}</strong> — ${ecue.credits || 0} ECTS</div>
+                <div class="ecue-meta" style="opacity:.7;font-size:12px;margin-top:2px;">
+                  ${escapeHtml(ecue.code || "")}${ecue.teacher ? " • " + escapeHtml(ecue.teacher) : ""}
+                </div>
+                ${ecue.description ? `<div class="ecue-desc" style="opacity:.9;font-size:13px;margin-top:6px;">${escapeHtml(ecue.description)}</div>` : ""}
+              </div>
+            `
+              )
+              .join("")}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// =====================
+// iCal auto load
+// =====================
 async function loadIcsFromServer() {
   try {
     setStatus("Chargement de edt.ics…");
@@ -116,7 +301,6 @@ function parseWithIcalJs(icsText) {
     const title = ev.summary || "Événement";
     const room = (ev.location || "").trim();
 
-    // Récurrences (bornées)
     if (ev.isRecurring()) {
       const startRange = new Date();
       startRange.setDate(startRange.getDate() - 30);
@@ -151,10 +335,10 @@ function toEventObj(title, room, start, end) {
   return { title, room, start, end, weekKey, color };
 }
 
-// ========== Weeks (seulement celles existantes) ==========
+// ========== Weeks ==========
 function buildAvailableWeeks() {
-  const set = new Set(allEvents.map(e => e.weekKey));
-  availableWeeks = Array.from(set).sort(); // YYYY-W## => tri OK
+  const set = new Set(allEvents.map((e) => e.weekKey));
+  availableWeeks = Array.from(set).sort();
   selectedWeekIndex = Math.min(selectedWeekIndex, Math.max(0, availableWeeks.length - 1));
 }
 
@@ -165,15 +349,13 @@ function pickInitialWeekAndDay() {
     return;
   }
 
-  // Semaine du prochain événement, sinon premier
   const now = new Date();
-  const next = allEvents.find(e => e.end >= now) || allEvents[0];
+  const next = allEvents.find((e) => e.end >= now) || allEvents[0];
   const wk = next.weekKey;
 
   const idx = availableWeeks.indexOf(wk);
   selectedWeekIndex = idx >= 0 ? idx : 0;
 
-  // Jour = jour du prochain événement (sinon lundi)
   selectedDay = startOfLocalDay(next.start);
   if (isoWeekKeyFromLocalDate(selectedDay) !== availableWeeks[selectedWeekIndex]) {
     selectedDay = startOfLocalDay(mondayOfWeekKey(availableWeeks[selectedWeekIndex]));
@@ -191,13 +373,13 @@ function changeWeek(delta) {
   renderAll();
 }
 
-// ========== Render ==========
+// ========== Render EDT ==========
 function renderAll() {
   renderWeekBar();
   renderDaySelector();
   renderSchedule();
   updateWeekButtons();
-  updateSummary(); // ✅ Résumé corrigé
+  updateSummary();
 }
 
 function renderWeekBar() {
@@ -214,7 +396,7 @@ function renderWeekBar() {
   const weekNo = Number(wk.split("-W")[1]);
   weekLabelEl.textContent = `Semaine ${weekNo}`;
 
-  const fmt = d => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  const fmt = (d) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
   weekDatesEl.textContent = `${fmt(monday)} → ${fmt(sunday)}`;
 }
 
@@ -235,7 +417,7 @@ function renderDaySelector() {
       selectedDay = startOfLocalDay(d);
       renderDaySelector();
       renderSchedule();
-      updateSummary(); // ✅ met à jour aussi au changement de jour
+      updateSummary();
     });
     daySelectorEl.appendChild(btn);
   }
@@ -255,10 +437,9 @@ function renderSchedule() {
 
   const wk = availableWeeks[selectedWeekIndex];
 
-  // Filtre : semaine choisie + même JOUR (Y/M/D)
   const items = allEvents
-    .filter(e => e.weekKey === wk)
-    .filter(e => sameLocalDay(e.start, selectedDay))
+    .filter((e) => e.weekKey === wk)
+    .filter((e) => sameLocalDay(e.start, selectedDay))
     .sort((a, b) => a.start - b.start);
 
   if (!items.length) {
@@ -271,21 +452,23 @@ function renderSchedule() {
   }
 
   const now = new Date();
-  container.innerHTML = items.map(ev => {
-    const isCurrent = now >= ev.start && now <= ev.end;
-    return `
-      <div class="schedule-card ${isCurrent ? "current" : ""}">
-        ${isCurrent ? `<span class="current-badge">En cours</span>` : ""}
-        <span class="time-badge" style="background:${ev.color}">
-          ${formatHHMM(ev.start)} - ${formatHHMM(ev.end)}
-        </span>
-        <h3>${escapeHtml(ev.title)}</h3>
-        <div class="schedule-info">
-          ${ev.room ? `<span>📍 ${escapeHtml(ev.room)}</span>` : ""}
+  container.innerHTML = items
+    .map((ev) => {
+      const isCurrent = now >= ev.start && now <= ev.end;
+      return `
+        <div class="schedule-card ${isCurrent ? "current" : ""}">
+          ${isCurrent ? `<span class="current-badge">En cours</span>` : ""}
+          <span class="time-badge" style="background:${ev.color}">
+            ${formatHHMM(ev.start)} - ${formatHHMM(ev.end)}
+          </span>
+          <h3>${escapeHtml(ev.title)}</h3>
+          <div class="schedule-info">
+            ${ev.room ? `<span>📍 ${escapeHtml(ev.room)}</span>` : ""}
+          </div>
         </div>
-      </div>
-    `;
-  }).join("");
+      `;
+    })
+    .join("");
 }
 
 function updateWeekButtons() {
@@ -300,7 +483,7 @@ function updateWeekButtons() {
   nextWeekBtn.style.opacity = nextWeekBtn.disabled ? "0.5" : "1";
 }
 
-// ========== ✅ Résumé (corrige le 0h/0 jours) ==========
+// ===== Résumé EDT =====
 function updateSummary() {
   if (!sumCoursesEl || !sumHoursEl || !sumDaysEl) return;
 
@@ -312,12 +495,10 @@ function updateSummary() {
   }
 
   const wk = availableWeeks[selectedWeekIndex];
-  const weekEvents = allEvents.filter(e => e.weekKey === wk);
+  const weekEvents = allEvents.filter((e) => e.weekKey === wk);
 
-  // Nombre d'événements (semaine)
   sumCoursesEl.textContent = String(weekEvents.length);
 
-  // Durée totale (semaine) : somme des (end-start)
   let minutes = 0;
   for (const e of weekEvents) {
     const diff = (e.end - e.start) / 60000;
@@ -326,14 +507,15 @@ function updateSummary() {
   const hours = Math.round((minutes / 60) * 10) / 10;
   sumHoursEl.textContent = `${hours}h`;
 
-  // Jours distincts (semaine)
-  const daySet = new Set(weekEvents.map(e =>
-    `${e.start.getFullYear()}-${e.start.getMonth()}-${e.start.getDate()}`
-  ));
+  const daySet = new Set(
+    weekEvents.map((e) => `${e.start.getFullYear()}-${e.start.getMonth()}-${e.start.getDate()}`)
+  );
   sumDaysEl.textContent = String(daySet.size);
 }
 
-// ========== Helpers (dates robustes) ==========
+// =====================
+// Helpers
+// =====================
 function startOfLocalDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 }
@@ -347,11 +529,12 @@ function addDaysLocal(d, n) {
   return x;
 }
 
-// ISO week stable (UTC midday pour éviter DST)
 function isoWeekKeyFromLocalDate(date) {
-  const y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
+  const y = date.getFullYear(),
+    m = date.getMonth(),
+    d = date.getDate();
   const utc = new Date(Date.UTC(y, m, d, 12, 0, 0));
-  const dayNum = utc.getUTCDay() || 7; // 1..7
+  const dayNum = utc.getUTCDay() || 7;
   utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
   const weekYear = utc.getUTCFullYear();
 
@@ -364,7 +547,6 @@ function isoWeekKeyFromLocalDate(date) {
   return `${weekYear}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-// Lundi d’une semaine ISO
 function mondayOfWeekKey(weekKey) {
   const [yy, ww] = weekKey.split("-W");
   const year = Number(yy);

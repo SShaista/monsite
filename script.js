@@ -40,7 +40,6 @@ document.addEventListener("DOMContentLoaded", () => {
       day: "numeric",
       month: "long",
     });
-    setupNavigation();
   }
 
   // Loading -> app
